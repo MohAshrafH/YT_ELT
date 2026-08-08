@@ -1,5 +1,3 @@
-// json response from YouTube API for channel details in video_stats.py
-
 {
     "kind": "youtube#channelListResponse",
     "etag": "mky5yfatRnp-E8N9-BwXGY8W8Dk",
