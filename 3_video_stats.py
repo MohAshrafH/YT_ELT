@@ -1,14 +1,13 @@
-# Stage 3: channel handle -> uploads playlist ID -> video IDs -> video records.
+# Stage 3: channel handle -> uploads playlist ID -> video IDs -> records -> JSON file.
 # The uploads playlist includes videos also organized into other playlists.
 # Each record includes title, publication time, duration, views, likes, and comments.
 # Run from the project folder: python -B 3_video_stats.py
-# The result is printed as a Python list of dictionaries; no file is written.
+# The result is saved under ./data with today's date; no result is printed.
 
 # Third-party library used to send HTTP requests to the YouTube Data API.
 import requests
 
-# Standard Python library for working with JSON.
-# Currently not required unless you use something like json.dumps() for formatted output.
+# Standard Python library used by json.dump() to write records as JSON.
 import json
 
 # Standard Python library that gives access to operating-system features,
@@ -17,6 +16,10 @@ import os
 
 # Standard timing utilities; currently unused because retries are not implemented.
 import time
+
+# Import the module so its date class is accessed as datetime.date.
+# datetime.date.today() supplies the machine's local date for the output filename.
+import datetime
 
 # Imports load_dotenv() from the python-dotenv package.
 # python-dotenv reads variables stored in a .env file and loads them
@@ -29,12 +32,15 @@ from dotenv import load_dotenv
 # API_KEY=your_youtube_api_key
 #
 # After this executes, API_KEY can be retrieved using os.getenv().
+# The path is relative to the terminal's working directory, not the script file.
+# By default, variables already present in the environment are not overwritten.
 load_dotenv(dotenv_path="./.env")
 
 
 # Retrieve the environment variable named "API_KEY".
 # The actual API key is therefore kept outside the Python source code.
 # This helps prevent the secret from being committed directly to Git.
+# If the variable is missing, the value is None; this code does not validate it.
 API_KEY = os.getenv("API_KEY")
 
 
@@ -85,6 +91,7 @@ def get_playlist_id():
 
         # "items" contains the channel resources returned by YouTube.
         # Since we requested one specific channel, [0] gets the first result.
+        # An empty result list raises IndexError here; it is not handled below.
         channel_items = data["items"][0]
 
 
@@ -243,14 +250,35 @@ def extract_video_data(video_ids):
     except requests.exceptions.RequestException as e:
         raise e
 
+# Serialize the complete list of video dictionaries to a dated JSON file.
+# This function has no explicit return, so it returns None after saving.
+def save_to_json(extracted_data):
+    # ./data is relative to the current working directory and must already exist.
+    # This function does not create folders. For example: YT_data_2026-10-17.json.
+    # Calling date.today() requires the module prefix because we imported datetime.
+    file_path = f"./data/YT_data_{datetime.date.today()}.json"
+
+    # "w" creates the file or overwrites an existing file with the same name.
+    # Repeated runs on the same date therefore replace that day's output.
+    # UTF-8 supports non-English titles; with closes the file even on an error.
+    with open(file_path, "w", encoding="utf-8") as json_outfile:
+        # Write directly to the open file: dictionaries/lists become JSON objects/arrays.
+        # indent=4 makes it readable; ensure_ascii=False preserves Unicode characters.
+        # Python None becomes JSON null; existing string counts remain strings.
+        json.dump(extracted_data, json_outfile, indent=4, ensure_ascii=False)
+
 # __name__ is a special Python variable.
 # When this file is executed directly, its value is "__main__".
+# Importing this module runs setup but does not run the extraction/saving block.
 if __name__ == "__main__":
     # First resolve the configured channel handle to its uploads playlist ID.
     playlist_id = get_playlist_id()
     # Fetch all playlist pages and keep the video ID list for the next function.
     video_ids = get_video_id(playlist_id)
 
-    # Fetch video records in batches, then print the full list when extraction ends.
+    # Fetch video records in batches and keep the returned list in memory.
     # No progress messages are printed while the requests are running.
-    print(extract_video_data(video_ids))
+    video_data = extract_video_data(video_ids)
+    
+    # Save only after extraction succeeds; this call does not print a success message.
+    save_to_json(video_data)
