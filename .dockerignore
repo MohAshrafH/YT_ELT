@@ -1,0 +1,22 @@
+# Keep Git history and local Python environments out of the build context.
+.git/
+venv/
+.venv/
+
+# Local credentials/configuration must not be included in the image build context.
+.env
+.env.*
+!.env.example
+
+# Generated Python files and local tool caches.
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Documentation, extracted data, and runtime logs are not image build inputs.
+Markdowns/
+data/
+logs/
+video_stats.json
