@@ -8,3 +8,7 @@ __pycache__/
 
 # Local secrets
 .env
+
+# Keep the Airflow log directory, but do not commit generated runtime logs.
+/logs/*
+!/logs/.gitkeep
