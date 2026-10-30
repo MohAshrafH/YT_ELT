@@ -1,0 +1,235 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+# Adapted from the supplied Airflow 2.9.2/course configuration for
+# Windows PowerShell -> Podman -> WSL2 astro-machine. Local learning only.
+# Guide: Markdowns/Docker/Docker_Compose_Lecture_Explained.md
+name: yt-elt
+
+x-airflow-common: &airflow-common
+  # Reuse the image already built in Podman; IMAGE_TAG is not Airflow's version.
+  image: docker.io/${DOCKERHUB_NAMESPACE:?Set DOCKERHUB_NAMESPACE in .env}/${DOCKERHUB_REPOSITORY:?Set DOCKERHUB_REPOSITORY in .env}:${IMAGE_TAG:?Set IMAGE_TAG in .env}
+  environment: &airflow-common-env
+    # .env supplies Compose interpolation. Explicit entries supply containers.
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${METADATA_DATABASE_USERNAME:?Set METADATA_DATABASE_USERNAME}:${METADATA_DATABASE_PASSWORD:?Set METADATA_DATABASE_PASSWORD}@${POSTGRES_CONN_HOST:?Set POSTGRES_CONN_HOST}:${POSTGRES_CONN_PORT:?Set POSTGRES_CONN_PORT}/${METADATA_DATABASE_NAME:?Set METADATA_DATABASE_NAME}
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://${CELERY_BACKEND_USERNAME:?Set CELERY_BACKEND_USERNAME}:${CELERY_BACKEND_PASSWORD:?Set CELERY_BACKEND_PASSWORD}@${POSTGRES_CONN_HOST}:${POSTGRES_CONN_PORT}/${CELERY_BACKEND_NAME:?Set CELERY_BACKEND_NAME}
+    AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
+    AIRFLOW__CORE__FERNET_KEY: ${FERNET_KEY:?Set FERNET_KEY}
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    # Small course workload; reduce the default number of child processes.
+    AIRFLOW__CELERY__WORKER_CONCURRENCY: ${AIRFLOW_WORKER_CONCURRENCY:-2}
+    AIRFLOW__WEBSERVER__WORKERS: '2'
+    # Connection ID: postgres_db_yt_elt; Variable IDs: api_key, channel_handle.
+    AIRFLOW_CONN_POSTGRES_DB_YT_ELT: postgresql://${ELT_DATABASE_USERNAME:?Set ELT_DATABASE_USERNAME}:${ELT_DATABASE_PASSWORD:?Set ELT_DATABASE_PASSWORD}@${POSTGRES_CONN_HOST}:${POSTGRES_CONN_PORT}/${ELT_DATABASE_NAME:?Set ELT_DATABASE_NAME}
+    AIRFLOW_VAR_API_KEY: ${API_KEY:?Set API_KEY}
+    AIRFLOW_VAR_CHANNEL_HANDLE: ${CHANNEL_HANDLE:?Set CHANNEL_HANDLE}
+    # The later integration/data-quality tests read these ordinary variables.
+    ELT_DATABASE_NAME: ${ELT_DATABASE_NAME}
+    ELT_DATABASE_USERNAME: ${ELT_DATABASE_USERNAME}
+    ELT_DATABASE_PASSWORD: ${ELT_DATABASE_PASSWORD}
+    POSTGRES_CONN_HOST: ${POSTGRES_CONN_HOST}
+    POSTGRES_CONN_PORT: ${POSTGRES_CONN_PORT}
+  volumes:
+    # A Linux symlink avoids Podman's comma-delimited mount parser on this path.
+    # Run docker/prepare-podman-mount.ps1 once; see .env.example.
+    - ${CONTAINER_PROJECT_ROOT:-.}/config:/opt/airflow/config
+    - ${CONTAINER_PROJECT_ROOT:-.}/dags:/opt/airflow/dags
+    - ${CONTAINER_PROJECT_ROOT:-.}/data:/opt/airflow/data
+    - ${CONTAINER_PROJECT_ROOT:-.}/include:/opt/airflow/include
+    - ${CONTAINER_PROJECT_ROOT:-.}/logs:/opt/airflow/logs
+    - ${CONTAINER_PROJECT_ROOT:-.}/plugins:/opt/airflow/plugins
+    - ${CONTAINER_PROJECT_ROOT:-.}/tests:/opt/airflow/tests
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on: &airflow-common-depends-on
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  postgres:
+    # Course version; use a new volume for any later major-version migration.
+    image: docker.io/library/postgres:13
+    environment:
+      POSTGRES_USER: ${POSTGRES_CONN_USERNAME:?Set POSTGRES_CONN_USERNAME}
+      POSTGRES_PASSWORD: ${POSTGRES_CONN_PASSWORD:?Set POSTGRES_CONN_PASSWORD}
+      POSTGRES_DB: postgres
+      METADATA_DATABASE_NAME: ${METADATA_DATABASE_NAME}
+      METADATA_DATABASE_USERNAME: ${METADATA_DATABASE_USERNAME}
+      METADATA_DATABASE_PASSWORD: ${METADATA_DATABASE_PASSWORD}
+      CELERY_BACKEND_NAME: ${CELERY_BACKEND_NAME}
+      CELERY_BACKEND_USERNAME: ${CELERY_BACKEND_USERNAME}
+      CELERY_BACKEND_PASSWORD: ${CELERY_BACKEND_PASSWORD}
+      ELT_DATABASE_NAME: ${ELT_DATABASE_NAME}
+      ELT_DATABASE_USERNAME: ${ELT_DATABASE_USERNAME}
+      ELT_DATABASE_PASSWORD: ${ELT_DATABASE_PASSWORD}
+    ports:
+      # Windows clients: localhost:5433. Containers still use postgres:5432.
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+      - type: bind
+        source: ${CONTAINER_PROJECT_ROOT:-.}/docker/postgres/init-multiple-databases.sh
+        target: /docker-entrypoint-initdb.d/init-multiple-databases.sh
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      # TCP avoids reporting the entrypoint's temporary socket-only server ready.
+      test: ["CMD-SHELL", 'pg_isready -h 127.0.0.1 -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  redis:
+    image: docker.io/library/redis:7.2-bookworm
+    # Reachable on the Compose network; no Windows port is published.
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "127.0.0.1:${AIRFLOW_WEB_HOST_PORT:-8081}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  airflow-worker:
+    <<: *airflow-common
+    command: celery worker
+    environment:
+      <<: *airflow-common-env
+      DUMB_INIT_SETSID: '0'
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'celery --app airflow.providers.celery.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}" || celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+    stop_grace_period: 60s
+    restart: unless-stopped
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -ec
+      - |
+        mkdir -p /opt/airflow/logs
+        chown -R "${AIRFLOW_UID:-50000}:0" /opt/airflow/logs
+        exec /entrypoint airflow version
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_WWW_USER_USERNAME:?Set AIRFLOW_WWW_USER_USERNAME}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_WWW_USER_PASSWORD:?Set AIRFLOW_WWW_USER_PASSWORD}
+    # Root only for log-directory preparation. Normal services use AIRFLOW_UID.
+    user: '0:0'
+    volumes:
+      - ${CONTAINER_PROJECT_ROOT:-.}/logs:/opt/airflow/logs
+    restart: 'no'
+
+  airflow-cli:
+    <<: *airflow-common
+    profiles: [debug]
+    environment:
+      <<: *airflow-common-env
+      CONNECTION_CHECK_MAX_COUNT: '0'
+    command: [bash, -c, airflow]
+
+  # The course needs neither deferrable tasks nor Flower yet.
+  # Explicitly enable these profiles later if those features are introduced.
+  airflow-triggerer:
+    <<: *airflow-common
+    profiles: [triggerer]
+    command: triggerer
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  flower:
+    <<: *airflow-common
+    profiles: [flower]
+    command: celery flower
+    ports:
+      - "127.0.0.1:${FLOWER_HOST_PORT:-5556}:5555"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:5555/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+# Actual name with the yt-elt project: yt-elt_postgres-db-volume.
+volumes:
+  postgres-db-volume:

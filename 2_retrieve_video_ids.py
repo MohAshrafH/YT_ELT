@@ -34,8 +34,8 @@ load_dotenv(dotenv_path="./.env")
 API_KEY = os.getenv("API_KEY")
 
 
-# YouTube channel handle that will be passed to the API request.
-CHANNEL_HANDLE = "MrBeast"
+# Read the target channel from .env; keep the previous default if it is absent.
+CHANNEL_HANDLE = os.getenv("CHANNEL_HANDLE", "MrBeast")
 
 # This limits each response page, not the total number of IDs collected.
 maxResults = 50  # Maximum number of results to retrieve per API request (max is 50).
