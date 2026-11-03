@@ -12,7 +12,7 @@ import json
 
 # Standard Python library that gives access to operating-system features,
 # including environment variables through os.getenv().
-import os
+#import os
 
 # Standard timing utilities; currently unused because retries are not implemented.
 import time
@@ -24,8 +24,11 @@ import datetime
 # Imports load_dotenv() from the python-dotenv package.
 # python-dotenv reads variables stored in a .env file and loads them
 # into the environment of the running Python process.
-from dotenv import load_dotenv
+#from dotenv import load_dotenv
 
+from airflow.decorators import task, dag
+
+from airflow.models import Variable
 
 # Read environment variables from the .env file located in the current directory.
 # Example .env content:
@@ -34,24 +37,24 @@ from dotenv import load_dotenv
 # After this executes, API_KEY can be retrieved using os.getenv().
 # The path is relative to the terminal's working directory, not the script file.
 # By default, variables already present in the environment are not overwritten.
-load_dotenv(dotenv_path="./.env")
+#load_dotenv(dotenv_path="./.env")
 
 
 # Retrieve the environment variable named "API_KEY".
 # The actual API key is therefore kept outside the Python source code.
 # This helps prevent the secret from being committed directly to Git.
 # If the variable is missing, the value is None; this code does not validate it.
-API_KEY = os.getenv("API_KEY")
+API_KEY = Variable.get("API_KEY")
 
 
 # Read the target channel from .env; keep the previous default if it is absent.
-CHANNEL_HANDLE = os.getenv("CHANNEL_HANDLE", "MrBeast")
+CHANNEL_HANDLE = Variable.get("CHANNEL_HANDLE")
 
 # Used both as playlist page size and video-request batch size.
 # This does not limit the total number of videos collected.
 maxResults = 50  # Maximum number of results to retrieve per API request (max is 50).
 
-
+@task
 # Define a reusable function that retrieves the channel's uploads playlist ID.
 def get_playlist_id():
 
@@ -127,6 +130,7 @@ def get_playlist_id():
         raise e
 
 
+@task
 # Accept one playlist ID string and return a list of video ID strings.
 # Despite the singular function name, this collects IDs across multiple pages.
 def get_video_id(playlist_id):
@@ -179,6 +183,7 @@ def get_video_id(playlist_id):
     except requests.exceptions.RequestException as e:
         raise e
 
+@task
 # Convert a list of video ID strings into a list of dictionaries of selected fields.
 def extract_video_data(video_ids):
     # Accumulate records across every batch, rather than resetting per request.
@@ -250,6 +255,7 @@ def extract_video_data(video_ids):
     except requests.exceptions.RequestException as e:
         raise e
 
+@task
 # Serialize the complete list of video dictionaries to a dated JSON file.
 # This function has no explicit return, so it returns None after saving.
 def save_to_json(extracted_data):
