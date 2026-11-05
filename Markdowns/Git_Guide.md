@@ -135,6 +135,48 @@ git status
 
 For an existing repository, there is no need to repeat `git init`, add `origin` again, or recreate the GitHub repository for each commit.
 
+## Undo a commit that was already pushed
+
+A commit is a saved snapshot in Git history. `c47c62e` identifies the commit that added PostgreSQL helpers, DWH documentation, container commands, and revised comments. Choose **one** option below; they have different effects.
+
+### Keep the files, but remove the latest commit from history
+
+Use this when you want to undo the commit/push and keep the work locally for a later commit. First check the branch and latest commit:
+
+```powershell
+git status
+git log --oneline -3
+git fetch origin
+git log --oneline -1 origin/main
+```
+
+For this example, proceed only if you are on `main` and both local and remote tips are `c47c62e`. If either tip differs, inspect the new commits before resetting. Run each command separately and check that it succeeds:
+
+```powershell
+git reset --mixed c47c62e~1
+git push --force-with-lease=refs/heads/main:c47c62e origin main
+git status
+```
+
+`~1` means the parent commit. `--mixed` moves the branch back and unstages changes while keeping working files, including edits made since the commit. Files first added by the removed commit become untracked. This guide's current edits also remain on disk. **Do not use `--hard` to keep your work.**
+
+The push rewrites remote `main`, removing this commit from that branch's history. The explicit lease rejects the push if remote `main` no longer points to `c47c62e`; do not bypass a rejection. Coordinate if others use the branch. Protected branches may reject history rewriting. Removing a commit from a branch does not guarantee its object or GitHub URL is immediately erased.
+
+### Undo the code changes while preserving shared history
+
+Use a revert when you want the earlier file contents restored through a new commit, keeping the original commit visible. Start on `main` with a clean working tree; commit or stash pending work first. Since this guide has just been edited, the commands below stash it too:
+
+```powershell
+git stash push -u -m "Save local edits before reverting c47c62e"
+git revert --no-edit c47c62e
+git push origin main
+git stash pop
+```
+
+Only pop the stash if the stash command actually saved one and the revert/push succeeded. Check each command's result before continuing. A revert removes the original commit's changes, including newly added files; it does not merely uncommit them. If conflicts occur, resolve them and follow `git status`, or cancel the revert with `git revert --abort`. A stash pop can also require conflict resolution.
+
+These commands are documented for you to execute; editing this guide does not run them.
+
 ## Source notes
 
 Adapted from your existing note:

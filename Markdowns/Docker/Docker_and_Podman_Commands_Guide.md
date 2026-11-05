@@ -122,6 +122,43 @@ podman compose -p yt-elt -f docker-compose.yaml exec airflow-worker ls -la /opt/
 
 These commands demonstrate the container's Airflow, Python, and mounted Linux paths. Packages installed only in Windows `venv` are not automatically available here.
 
+### Enter the worker and run a Python script
+
+The project's worker container is **`yt-elt-airflow-worker-1`** (Compose service: `airflow-worker`). This container executes Airflow tasks and has the project's container dependencies and connection settings. Use it for the [DWH/ELT example](../DWH_ELT/Data_Utils_Explained.md).
+
+From Windows PowerShell, open an interactive Bash shell:
+
+```powershell
+podman exec -it yt-elt-airflow-worker-1 bash
+```
+
+Then run these commands **inside the container**:
+
+```bash
+cd /opt/airflow/dags
+python your_script.py
+exit
+```
+
+Replace `your_script.py` with the filename of your saved example under `dags/`. `exit` returns to PowerShell. The Windows `dags/` folder is mounted at `/opt/airflow/dags` inside the container. Running `datawarehouse/data_utils.py` alone only defines its helpers; use an example script that calls them to execute SQL.
+
+Alternatively, execute the script directly from PowerShell:
+
+```powershell
+podman exec -it yt-elt-airflow-worker-1 python /opt/airflow/dags/your_script.py
+```
+
+Or address the Compose service from the project directory, without depending on its generated container name:
+
+```powershell
+podman compose -p yt-elt -f docker-compose.yaml exec airflow-worker bash
+podman compose -p yt-elt -f docker-compose.yaml exec airflow-worker python /opt/airflow/dags/your_script.py
+```
+
+These are alternatives: the first opens a shell; the second runs Python directly. `-i` keeps input open and `-t` allocates an interactive terminal. To check container names, run `podman ps` in PowerShell. With Docker Engine, the equivalent commands use `docker exec` or `docker compose` against containers running in Docker.
+
+Executing a script this way runs ordinary Python immediately; it does not schedule or trigger an Airflow DAG.
+
 Check the actual databases and owners (the configured bootstrap user is `postgres`):
 
 ```powershell
