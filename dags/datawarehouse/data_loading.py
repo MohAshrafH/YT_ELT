@@ -5,7 +5,7 @@ import logging  # Record progress and error messages.
 logger = logging.getLogger(__name__)  # Name the logger after this Python module.
 
 
-def load_path():  # Read today's JSON file and return its contents.
+def load_data():  # Read today's JSON file and return its contents.
     file_path = f"./data/YT_data_{date.today()}.json"  # Use today's date (YYYY-MM-DD) in the relative path.
 
     try:  # Catch missing-file and invalid-JSON errors during loading.
