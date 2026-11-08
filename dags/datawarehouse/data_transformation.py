@@ -13,7 +13,7 @@ def parse_duration(duration_str):  # Accept duration text such as "P1DT2H3M4S".
             values[component] = int(value)  # Convert the extracted number to an integer and store it under its unit.
 
     total_duration = timedelta(  # Build a duration object using the extracted unit values.
-        days=values["D"], hours=values["H"], minutes=values["M"], secondsays=values["S"]
+        days=values["D"], hours=values["H"], minutes=values["M"], seconds=values["S"]
     )
 
     return total_duration  # Return the timedelta object to the caller if construction succeeds.

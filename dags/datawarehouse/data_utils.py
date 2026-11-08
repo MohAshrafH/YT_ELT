@@ -1,6 +1,7 @@
 from airflow.providers.postgres.hooks.postgres import PostgresHook  # Airflow's PostgreSQL hook.
 from psycopg2.extras import RealDictCursor  # Return rows keyed by column name.
 
+table = "yt_api"  # Table name used by create_table() and get_video_ids().
 
 def get_conn_cursor():
     # Use Airflow's connection settings to access elt_db.

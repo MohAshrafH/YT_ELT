@@ -10,6 +10,8 @@ from datawarehouse.data_modification import insert_rows, update_rows, delete_row
 # Import the function that converts a row's duration and assigns its video type.
 from datawarehouse.data_transformation import transform_data
 
+from airflow.decorators import task  # Turn decorated functions into Airflow tasks.
+
 import logging
 
 logger = logging.getLogger(__name__)  # Use this module's name to identify its log messages.
@@ -61,6 +63,7 @@ def staging_table():  # Synchronize the staging table with the loaded video reco
 
     # Without an explicit return, successful completion gives the caller None.
 
+@task
 def core_table():  # Synchronize the core table with transformed staging records.
     schema = 'core'  # Target database schema for inserts, updates, and deletions.
 

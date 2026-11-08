@@ -12,16 +12,21 @@ def insert_rows(cur, conn, schema, row):  # Accept a database cursor, connection
             video_id = 'video_id'  # Store a field name; this variable is not used in the visible code.
 
         # Build the SQL with schema/table names; %(name)s placeholders get values from the row mapping.
-        # cur is the database cursor used to send SQL commands to the database.
+            # Match database column names; placeholders read values from the JSON row.
             cur.execute(
-                # f substitutes {schema} and {table}; triple quotes allow SQL across multiple lines.
-                # The listed columns receive the VALUES below in the same order.
-                f"""INSERT INTO {schema}.{table}("Video ID", "Video Title", "Upload Date", "Duration", "Video Views", "Likes Count", "Comments Count")
-                VALUES (%(video_id)s, %(title)s, %(publishedAt)s, %(duration)s, %(viewCount)s, %(likeCount)s, %(commentCount)s);
+                f"""
+                INSERT INTO {schema}.{table} (
+                    "Video_ID", "Video_Title", "Upload_Date", "Duration",
+                    "Video_Views", "Likes_Count", "Comments_Count"
+                )
+                VALUES (
+                    %(video_id)s, %(title)s, %(publishedAt)s, %(duration)s,
+                    %(viewCount)s, %(likeCount)s, %(commentCount)s
+                );
                 """,
-                row  # Dictionary supplying values: %(title)s uses row["title"], and so on.
-            )  # The driver safely handles value quoting; the 's' does not require string values. 
-        
+                row,  # Supply values using the dictionary keys named in the placeholders.
+            )
+            
         else:  # Run when schema is not 'staging'.
             video_id = "Video_ID"  # Key used to read the video's ID from row for logging.
 

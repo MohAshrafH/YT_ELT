@@ -2,6 +2,8 @@
 from airflow import DAG
 import pendulum
 from datetime import datetime, timedelta
+from datawarehouse.dwh import staging_table, core_table  # Import the functions that create the DAG's tasks. 
+from airflow.decorators import task  # Turn decorated functions into Airflow tasks.
 
 # Import decorated TaskFlow functions used to build the extraction pipeline.
 from api.video_stats import get_playlist_id, get_video_id,extract_video_data, save_to_json
@@ -19,22 +21,21 @@ default_args = {
     "start_date": datetime(2025, 1, 1, tzinfo=local_tz),  # Earliest data-interval boundary.
 }
 
-# Register this workflow; tasks created in the with block belong to this DAG.
-with DAG(
-    dag_id="produce_json",  # Unique workflow ID used by the UI and CLI.
-    default_args=default_args,  # Apply the shared task settings above.
-    description="Extract YouTube video statistics and save raw JSON.",  # UI summary.
-    schedule="0 14 * * *",  # Daily at 14:00 Cairo; scheduled runs follow interval end.
-    catchup=False,  # Skip the backlog of historical scheduled intervals.
-    max_active_runs=1,  # Allow only one active run of this DAG at a time.
-    dagrun_timeout=timedelta(hours=1),  # Limit scheduled DAG runs to one hour.
-) as dag:
-    # These calls build tasks now; their bodies run later on an Airflow worker.
-    # Returned XComArgs reference task outputs, resolved through XCom at runtime.
-    playlist_id = get_playlist_id()  # Resolve the channel's uploads playlist ID.
-    video_ids = get_video_id(playlist_id)  # Collect video IDs across playlist pages.
-    extract_data = extract_video_data(video_ids)  # Fetch video metadata and statistics.
-    save_to_json_task = save_to_json(extract_data)  # Write records to a dated JSON file.
+with DAG(  # Create the workflow; tasks defined inside this block belong to it.
+    dag_id="update_db",  # Unique workflow ID shown in Airflow's UI and CLI.
+    default_args=default_args,  # Apply shared task settings from the existing dictionary.
+    description="DAG to process JSON file and insert data into both staging and core schemas",  # UI summary.
+    schedule="0 15 * * *",  # Run daily at 15:00 in the DAG's timezone, after its data interval ends.
+    catchup=False,  # Skip historical scheduled intervals when the DAG is enabled.
+) as dag:  # Store the DAG object in the variable dag.
 
-    # Explicit upstream-to-downstream order; output arguments already imply this chain.
-    playlist_id >> video_ids >> extract_data >> save_to_json_task
+    # Define tasks: these calls create tasks; workers execute their bodies later.
+    playlist_id = get_playlist_id()  # Find the channel's uploads playlist.
+    video_ids = get_video_id(playlist_id)  # Use that playlist to collect video IDs.
+    extract_data = extract_video_data(video_ids)  # Fetch metadata and statistics.
+    save_to_json_task = save_to_json(extract_data)  # Write the extracted records to JSON.
+    update_staging = staging_table()  # Read the JSON and synchronize staging.
+    update_core = core_table()  # Transform staging records and synchronize core.
+
+    # Start staging only after JSON saving succeeds; then update core.
+    save_to_json_task >> update_staging >> update_core
