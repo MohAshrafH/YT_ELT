@@ -9,6 +9,8 @@ project path through a Linux symlink; the command guide explains it.
 - [Docker Compose explained](Markdowns/Docker/Docker_Compose_Lecture_Explained.md)
 - [PostgreSQL initialization script explained](Markdowns/Docker/Postgres_Initialization_Script_Explained.md)
 - [Docker and Podman commands](Markdowns/Docker/Docker_and_Podman_Commands_Guide.md)
+- [PostgreSQL commands and interactions](Markdowns/Docker/Postgres_Commands_and_Interactions.md)
+- [Soda data quality: overview, examples, and commands](Markdowns/Testing/Soda_Data_Quality_Overview_and_Commands.md)
 
 Read the command guide before startup. Keep `.env` private and use `.env.example`
 only as a template. Normal shutdown preserves database storage; deleting the

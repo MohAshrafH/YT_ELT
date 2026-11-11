@@ -1,0 +1,21 @@
+checks for yt_api:
+  # Video IDs must be present and unique.
+  - missing_count("Video_ID") = 0
+  - duplicate_count("Video_ID") = 0
+
+  # Count videos with more likes than views; expect zero.
+  - likes_count_greater_than_vid_views = 0:
+      name: Check for Likes_Count greater than Video_Views
+      likes_count_greater_than_vid_views query: |
+        SELECT COUNT(*)
+        FROM yt_api
+        WHERE "Likes_Count" > "Video_Views"
+
+  # Tutorial rule: expect no videos with more comments than views.
+  # Reconsider this assumption: viewers can leave multiple comments.
+  - comments_count_greater_than_vid_views = 0:
+      name: Check for Comments_Count greater than Video_Views
+      comments_count_greater_than_vid_views query: |
+        SELECT COUNT(*)
+        FROM yt_api
+        WHERE "Comments_Count" > "Video_Views"

@@ -1,6 +1,6 @@
 # Docker commands, translated to your Podman setup
 
-Use this as the practical companion to the [Compose explanation](Docker_Compose_Lecture_Explained.md) and [PostgreSQL script explanation](Postgres_Initialization_Script_Explained.md). Commands below run in **Windows PowerShell**. Use Podman for YT_ELT; Docker examples explain the lecture's vocabulary.
+Use this as the practical companion to the [Compose explanation](Docker_Compose_Lecture_Explained.md) and [PostgreSQL script explanation](Postgres_Initialization_Script_Explained.md). Commands below run in **Windows PowerShell**. Most examples document the project's Podman setup; the PostgreSQL connection section also includes the Docker commands confirmed in your current session. Use the engine that contains your project containers.
 
 ## 1. The command layers
 
@@ -84,6 +84,81 @@ podman run --rm docker.io/mohammadashraf97/yt_api_elt:1.0.0 python --version
 
 Expect `2.9.2` and Python `3.10.x`. `run` creates a new container; `--rm` removes that temporary container after exit. It does not delete the image or start the full stack.
 
+### Rebuild and publish after adding dependencies: 1.0.0 to 1.0.1
+
+This is the Soda lecture's image-update workflow, tailored to your Docker Hub repository **`mohammadashraf97/yt_api_elt`**. Run commands from the YT_ELT root in PowerShell. Choose the Docker or Podman sequence for the engine holding your project; their local image stores are separate. These examples document a future update; creating this guide does not build, publish, or restart anything.
+
+First save the required packages in `requirements.txt`. For the tutorial's Soda Core v3 workflow, use a v3 constraint such as `soda-core-postgres>=3.5,<4`, and add `pytest` when implementing the functional tests. Resolve compatibility and pin the working versions when implementing. See [Soda overview and commands](../Testing/Soda_Data_Quality_Overview_and_Commands.md) for the version distinction.
+
+**Docker Engine — build, log in, and push:**
+
+```powershell
+docker build -f Dockerfile -t docker.io/mohammadashraf97/yt_api_elt:1.0.1 .
+docker images docker.io/mohammadashraf97/yt_api_elt
+docker login --username mohammadashraf97 docker.io
+docker push docker.io/mohammadashraf97/yt_api_elt:1.0.1
+```
+
+**Podman — equivalent sequence:**
+
+```powershell
+podman build -f Dockerfile -t docker.io/mohammadashraf97/yt_api_elt:1.0.1 .
+podman images docker.io/mohammadashraf97/yt_api_elt
+podman login --username mohammadashraf97 docker.io
+podman push docker.io/mohammadashraf97/yt_api_elt:1.0.1
+```
+
+Run each next step only after the previous command succeeds. At the hidden password prompt, enter your Docker Hub access token with repository read/write permission; see the [token setup steps](Podman_Build_and_Push_Steps.md#generate-the-access-token). The tag `1.0.1` versions your custom image; Airflow remains `2.9.2`. Changing the requirements file causes the Dockerfile's dependency-install layer to rebuild. [Docker build reference](https://docs.docker.com/reference/cli/docker/buildx/build/), [push reference](https://docs.docker.com/reference/cli/docker/image/push/).
+
+| Action | Docker example | Podman equivalent | What it changes |
+|---|---|---|---|
+| Build new contents | `docker build -t docker.io/mohammadashraf97/yt_api_elt:1.0.1 .` | Replace `docker` with `podman` | Creates a local image from the Dockerfile |
+| Assign another tag | `docker tag docker.io/mohammadashraf97/yt_api_elt:1.0.1 docker.io/mohammadashraf97/yt_api_elt:soda-v3` | Replace `docker` with `podman` | Adds a name for the same image; does not install packages |
+| Upload one tag | `docker push docker.io/mohammadashraf97/yt_api_elt:1.0.1` | Replace `docker` with `podman` | Publishes that tag to Docker Hub |
+| Download one tag | `docker pull docker.io/mohammadashraf97/yt_api_elt:1.0.1` | Replace `docker` with `podman` | Downloads the image; leaves running containers as they are |
+
+The extra `soda-v3` tag is optional and is not used by the remaining examples. Confirm `1.0.1` appears in your repository's **Tags** tab after the push.
+
+### Select the new tag, pull, and recreate the containers
+
+Before pulling or recreating, edit the existing `.env` entry to:
+
+```dotenv
+IMAGE_TAG=1.0.1
+```
+
+Keep `DOCKERHUB_NAMESPACE=mohammadashraf97` and `DOCKERHUB_REPOSITORY=yt_api_elt`. This is essential: Compose reads `${IMAGE_TAG}` from the environment/configuration; building or pushing `1.0.1` does not change the existing `1.0.0` selection. A PowerShell `$env:IMAGE_TAG` value takes precedence over `.env` if you have set one.
+
+**Docker Engine — the tutorial's pull/recreate/verify sequence:**
+
+```powershell
+docker compose -p yt-elt -f docker-compose.yaml config --quiet
+docker compose -p yt-elt -f docker-compose.yaml pull
+docker compose -p yt-elt -f docker-compose.yaml up -d --force-recreate
+docker compose -p yt-elt -f docker-compose.yaml ps -a
+docker ps --filter label=com.docker.compose.project=yt-elt --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}'
+docker inspect yt-elt-airflow-worker-1 --format '{{.Config.Image}}'
+```
+
+**Podman — equivalent sequence:**
+
+```powershell
+podman compose -p yt-elt -f docker-compose.yaml config --quiet
+podman compose -p yt-elt -f docker-compose.yaml pull
+podman compose -p yt-elt -f docker-compose.yaml up -d --force-recreate
+podman compose -p yt-elt -f docker-compose.yaml ps -a
+podman ps --filter label=com.docker.compose.project=yt-elt --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}'
+podman inspect yt-elt-airflow-worker-1 --format '{{.Config.Image}}'
+```
+
+Expect the worker's image reference to end in **`:1.0.1`**, and the application services to become healthy. Check `airflow-init` logs as in section 4. The full-stack recreation replaces service containers and briefly interrupts the application; named database storage remains attached. `airflow-init` completing with exit code zero is normal.
+
+`compose pull` downloads the configured service images, including PostgreSQL and Redis for this full-stack sequence. To download only the custom Airflow image, use `docker compose -p yt-elt -f docker-compose.yaml pull airflow-worker` (or `podman compose ...`); the Airflow services share that image. Pulling does not start containers. [Compose pull reference](https://docs.docker.com/reference/cli/docker/compose/pull/).
+
+`up -d --force-recreate` replaces containers using the selected image; **it does not itself rebuild this project's Dockerfile**. This Compose file has `image:` entries and no `build:` section, so `compose build` or `up --build` does not replace the explicit build step above. `restart` also does not adopt a newly selected image. [Compose up reference](https://docs.docker.com/reference/cli/docker/compose/up/).
+
+For a local-only update on the same engine, skip login/push/pull after building, select `IMAGE_TAG=1.0.1`, and recreate using the local image. For the published-image workflow, complete the push before pulling. If the worker still shows `1.0.0`, check the selected tag, shell overrides, engine, and Compose project before recreating again; closing VS Code is not an image-update step.
+
 ## 4. Start the stack and verify initialization
 
 The tailored file already includes initialization dependencies, so the normal startup is:
@@ -159,6 +234,87 @@ These are alternatives: the first opens a shell; the second runs Python directly
 
 Executing a script this way runs ordinary Python immediately; it does not schedule or trigger an Airflow DAG.
 
+### Verify Soda and pytest in the rebuilt worker
+
+After the dependency update and recreation in section 3, the tutorial enters the worker with `docker exec`. Your Docker commands from PowerShell are:
+
+```powershell
+docker exec -it yt-elt-airflow-worker-1 bash
+```
+
+Inside that **Linux container**, check the installed packages and CLI:
+
+```bash
+python -m pip show soda-core-postgres
+python -m pip show pytest
+soda --help
+exit
+```
+
+The first command confirms the **Soda PostgreSQL connector**, not installation of the PostgreSQL database server. Expect pytest only if you included it in the rebuilt requirements. `exit` returns to PowerShell.
+
+You can run the same checks directly through Compose, without opening Bash:
+
+```powershell
+docker compose -p yt-elt -f docker-compose.yaml exec airflow-worker python -m pip show soda-core-postgres
+docker compose -p yt-elt -f docker-compose.yaml exec airflow-worker python -m pip show pytest
+docker compose -p yt-elt -f docker-compose.yaml exec airflow-worker soda --help
+```
+
+For Podman, use `podman exec -it yt-elt-airflow-worker-1 bash`, or replace `docker compose` with `podman compose` in the direct checks. If the package is absent, confirm the worker image tag and the requirements used to build it. The [Soda guide](../Testing/Soda_Data_Quality_Overview_and_Commands.md) covers connection tests and data scans after these installation checks.
+
+### Connect to PostgreSQL and query the ELT database
+
+For the complete PostgreSQL-only walkthrough, including roles, databases, schemas, tables, and example psql output, see [PostgreSQL commands and interactions](Postgres_Commands_and_Interactions.md).
+
+Your `docker compose ps postgres` output on 2026-11-08 confirmed the running container name **`yt-elt-postgres-1`**, Compose service **`postgres`**, and Windows port **5433** mapped to container port **5432**.
+
+Run these commands from the YT_ELT project directory in PowerShell:
+
+```powershell
+# Check the PostgreSQL service and its actual container name.
+docker compose ps postgres
+
+# Only if the service needs starting:
+docker compose up -d postgres
+
+# Open psql using the Compose service name.
+docker compose exec postgres psql -U yt_api_user -d elt_db
+```
+
+Alternatively, connect directly using the confirmed container name:
+
+```powershell
+docker exec -it yt-elt-postgres-1 psql -U yt_api_user -d elt_db
+```
+
+Choose either connection command. `docker exec` expects a container name or ID, so `docker exec -it postgres ...` fails with `no container with name or ID "postgres" found`. `docker compose exec` resolves the service name `postgres` to its container. Compose generates names from the project, service, and instance number; recheck `docker compose ps postgres` if the name changes.
+
+At the `elt_db=>` prompt, run SQL and psql commands:
+
+```sql
+-- List tables in the core schema.
+\dt core.*
+
+-- Query the table shown in the course screenshot, if it exists.
+SELECT * FROM core.yt_api;
+
+-- Leave psql and return to PowerShell.
+\q
+```
+
+SQL statements end with `;`. The psql commands `\dt` and `\q` do not need one. If the table is missing, use `\dt *.*` to inspect existing tables; connecting to PostgreSQL does not create the application's tables or run the ELT pipeline.
+
+For containers managed through Podman, the equivalent connection commands are:
+
+```powershell
+podman compose -p yt-elt -f docker-compose.yaml exec postgres psql -U yt_api_user -d elt_db
+# Alternative using the container name:
+podman exec -it yt-elt-postgres-1 psql -U yt_api_user -d elt_db
+```
+
+### Check database owners and password authentication
+
 Check the actual databases and owners (the configured bootstrap user is `postgres`):
 
 ```powershell
@@ -192,6 +348,8 @@ podman compose -p yt-elt -f docker-compose.yaml up -d
 ```
 
 Editing a mounted DAG/SQL/data file usually needs no image rebuild. Editing `requirements.txt` or Dockerfile does: rebuild the selected image, then recreate affected services. Changing `.env` requires recreation, but changing a database password additionally requires updating the stored role password. See the script guide before doing that.
+
+For the complete dependency-update example, follow [rebuild and publish](#rebuild-and-publish-after-adding-dependencies-100-to-101), then [select, pull, and recreate](#select-the-new-tag-pull-and-recreate-the-containers). Those steps use `1.0.1`; the initial-start examples earlier in this guide use `1.0.0`.
 
 When every workload in this shared machine is stopped, `podman machine stop astro-machine` shuts down Linux while preserving it. This affects all projects in that machine, so first inspect `podman ps`. Keep the old Astro containers and volumes intact.
 
@@ -233,7 +391,11 @@ podman compose -p yt-elt -f docker-compose.yaml up -d
 |---|---|
 | Cannot connect to Podman | Machine state, `podman version`, default rootful connection. |
 | Missing Compose provider | Existing `docker-compose.exe`; see [provider setup](https://podman-desktop.io/docs/compose/setting-up-compose). |
+| `no container with name or ID "postgres" found` | Use `docker compose exec postgres psql -U yt_api_user -d elt_db`, or `docker exec -it yt-elt-postgres-1 psql -U yt_api_user -d elt_db`; confirm the name with `docker compose ps postgres`. |
 | Required variable missing | Actual `.env` filename/value and any overriding PowerShell environment setting. |
+| Worker still uses `1.0.0` after building `1.0.1` | Set `IMAGE_TAG=1.0.1`, check shell overrides and engine, then pull if using the registry and recreate; `restart` does not adopt a new image. |
+| Push denied or tag cannot be pulled | Correct Docker Hub account/repository, access-token permissions, successful push, and identical tag spelling. |
+| Soda missing after an image update | Confirm `requirements.txt` included the connector, the image build succeeded, and the worker was recreated from that image. |
 | Invalid mount or script is a directory | File exists, correct root, alias prepared; inspect `podman machine ssh astro-machine ls /home/user/yt-elt-project/docker/postgres`. |
 | `Python: invalid mount option` | Ensure `CONTAINER_PROJECT_ROOT` uses the comma-free Linux alias, then rerun the helper. |
 | `^M` / carriage-return errors | Save `.sh` with LF and UTF-8 without BOM. |

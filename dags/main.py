@@ -8,6 +8,8 @@ from airflow.decorators import task  # Turn decorated functions into Airflow tas
 # Import decorated TaskFlow functions used to build the extraction pipeline.
 from api.video_stats import get_playlist_id, get_video_id,extract_video_data, save_to_json
 
+from dataquality.soda import yt_elt_data_quality
+
 # Keep the start date and scheduled runs aligned with Cairo's timezone rules.
 local_tz = pendulum.timezone("Africa/Cairo")
 
@@ -20,6 +22,9 @@ default_args = {
     "email": "your_email@example.com",  # Placeholder recipient; alerts above are disabled.
     "start_date": datetime(2025, 1, 1, tzinfo=local_tz),  # Earliest data-interval boundary.
 }
+
+staging_schema = "staging"  # Database schema for staging tables.
+core_schema = "core"  # Database schema for core tables.
 
 with DAG(  # Create the workflow; tasks defined inside this block belong to it.
     dag_id="update_db",  # Unique workflow ID shown in Airflow's UI and CLI.
@@ -39,3 +44,18 @@ with DAG(  # Create the workflow; tasks defined inside this block belong to it.
 
     # Start staging only after JSON saving succeeds; then update core.
     save_to_json_task >> update_staging >> update_core
+
+    with DAG(  # Create a DAG; tasks defined inside this block belong to it.
+    dag_id="data_quality",  # Name identifying this workflow in Airflow.
+    default_args=default_args,  # Apply task defaults from the previously defined dictionary.
+    description="DAG to check the data quality on both layers in the db",  # Describe the workflow in Airflow.
+    schedule="0 16 * * *",  # Run daily at 16:00 in the DAG's timezone (minute, hour, day, month, weekday).
+    catchup=False,  # Skip creating runs for missed historical schedule intervals.
+    ) as dag_update:  # Store the DAG object in dag_update.
+
+        # Define tasks
+        soda_validate_staging = yt_elt_data_quality(staging_schema)  # Create a Soda task using the staging schema value.
+        soda_validate_core = yt_elt_data_quality(core_schema)  # Create a Soda task using the core schema value.
+
+        # Define dependencies
+        soda_validate_staging >> soda_validate_core  # Run the core task after the staging task succeeds by default.
