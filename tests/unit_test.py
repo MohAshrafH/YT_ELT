@@ -45,8 +45,8 @@ def test_dags_integrity(dagbag):
 
     # 4.
     expected_task_counts = {  # Each key: value pair maps a DAG ID to its expected task count.
-        "produce_json": 4,  # Expects four tasks in produce_json.
-        "update_db": 6,  # Expects six tasks in update_db.
+        "produce_json": 5,  # Includes trigger_update_db.
+        "update_db": 7,  # Includes trigger_data_quality.
         "data_quality": 2,  # Expects two tasks in data_quality.
     }
     print("-----------")  # Starts the output for the per-DAG task counts.

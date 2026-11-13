@@ -1,7 +1,3 @@
 # Extra Python packages to install inside the Airflow image, not Windows venv.
-# No extra packages are needed for this lecture yet.
-# Later, add one requirement per line and rebuild the image.
-# Example format (comment only): package-name==1.2.3
-
 soda-core-postgres==3.3.14
-pytest==8.3.2
+pytest==8.3.3

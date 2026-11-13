@@ -11,6 +11,7 @@ project path through a Linux symlink; the command guide explains it.
 - [Docker and Podman commands](Markdowns/Docker/Docker_and_Podman_Commands_Guide.md)
 - [PostgreSQL commands and interactions](Markdowns/Docker/Postgres_Commands_and_Interactions.md)
 - [Soda data quality: overview, examples, and commands](Markdowns/Testing/Soda_Data_Quality_Overview_and_Commands.md)
+- [GitHub Actions testing and repository setup](Markdowns/Testing/GitHub_Actions_CI_CD_Testing.md)
 
 Read the command guide before startup. Keep `.env` private and use `.env.example`
 only as a template. Normal shutdown preserves database storage; deleting the

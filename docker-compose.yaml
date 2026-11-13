@@ -69,6 +69,7 @@ services:
     # Course version; use a new volume for any later major-version migration.
     image: docker.io/library/postgres:13
     environment:
+      # Compose maps the same inputs from local .env or the GitHub Actions job.
       POSTGRES_USER: ${POSTGRES_CONN_USERNAME:?Set POSTGRES_CONN_USERNAME}
       POSTGRES_PASSWORD: ${POSTGRES_CONN_PASSWORD:?Set POSTGRES_CONN_PASSWORD}
       POSTGRES_DB: postgres
@@ -146,6 +147,7 @@ services:
 
   airflow-worker:
     <<: *airflow-common
+    container_name: ${AIRFLOW_WORKER_CONTAINER_NAME:-}
     command: celery worker
     environment:
       <<: *airflow-common-env
